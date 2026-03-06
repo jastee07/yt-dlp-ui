@@ -1,9 +1,11 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs/promises');
-const { spawn, spawnSync } = require('child_process');
-const { validateTimes, resolveClipName, buildYtDlpArgs } = require('./core/clipper');
+const { spawnSync } = require('child_process');
+const { validateTimes, resolveClipName } = require('./core/clipper');
 const { summarizeDependencyStatus } = require('./core/deps');
+const { validateClipRequest, validateOutputPath } = require('./core/validation');
+const { runWrapperCommand } = require('./core/wrapper');
 
 const DATA_DIR = path.join(app.getPath('userData'), 'data');
 const CONFIG_PATH = path.join(DATA_DIR, 'config.json');
@@ -36,8 +38,8 @@ function getDependencyStatus() {
 
 function createWindow() {
   const win = new BrowserWindow({
-    width: 720,
-    height: 620,
+    width: 760,
+    height: 700,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -59,50 +61,93 @@ ipcMain.handle('dialog:pick-folder', async () => {
   return { ok: true, path: result.filePaths[0] };
 });
 
-ipcMain.handle('clip:run', async (_evt, payload) => {
-  const { url, savePath, name, start, end } = payload || {};
-  if (!url || typeof url !== 'string' || !url.includes('youtube.com/watch')) {
-    return { ok: false, error: 'Invalid YouTube watch URL.' };
-  }
-  if (!savePath || typeof savePath !== 'string') {
-    return { ok: false, error: 'Save path is required.' };
-  }
+ipcMain.handle('clip:metadata', async (_evt, payload) => {
+  const request = validateClipRequest(payload);
+  if (!request.ok) return { ok: false, error: request.errors[0] };
 
   const deps = getDependencyStatus();
   if (!deps.ok) return { ok: false, error: deps.message };
 
-  const time = validateTimes(start, end);
-  if (!time.ok) return time;
+  const envelope = await runWrapperCommand('metadata', {
+    url: request.normalized.url,
+    retryCount: 1,
+  });
 
-  await fs.mkdir(savePath, { recursive: true });
+  if (!envelope.ok) {
+    return {
+      ok: false,
+      error: envelope.error?.message || 'Metadata request failed',
+      details: envelope.error?.details,
+    };
+  }
+
+  return { ok: true, metadata: envelope.result };
+});
+
+ipcMain.handle('clip:run', async (_evt, payload) => {
+  const lifecycle = ['queued'];
+
+  const request = validateClipRequest(payload);
+  if (!request.ok) return { ok: false, error: request.errors[0], lifecycle };
+
+  const deps = getDependencyStatus();
+  if (!deps.ok) return { ok: false, error: deps.message, lifecycle };
+
+  const time = validateTimes(request.normalized.start, request.normalized.end);
+  if (!time.ok) return { ok: false, error: time.error, lifecycle };
+
+  const outputPath = validateOutputPath(request.normalized.savePath);
+  if (!outputPath.ok) return { ok: false, error: outputPath.error, details: outputPath.details, lifecycle };
+
+  lifecycle.push('processing');
+
   const config = await loadConfig();
-  config.defaultSavePath = savePath;
+  config.defaultSavePath = outputPath.resolvedPath;
 
   const { name: baseName } = resolveClipName({
-    providedName: name,
-    savePath,
+    providedName: request.normalized.name,
+    savePath: outputPath.resolvedPath,
     state: config,
   });
 
   await saveConfig(config);
 
-  const args = buildYtDlpArgs({
-    url,
-    savePath,
-    baseName,
-    start: time.start,
-    end: time.end,
+  lifecycle.push('downloading');
+  const envelope = await runWrapperCommand('download', {
+    url: request.normalized.url,
+    savePath: outputPath.resolvedPath,
+    clipNamePolicy: request.normalized.name ? 'explicit' : 'auto',
+    clip: {
+      name: request.normalized.name || undefined,
+      start: time.start || undefined,
+      end: time.end || undefined,
+    },
+    outputHint: baseName,
+    format: request.normalized.format || undefined,
+    retryCount: 1,
   });
 
-  return new Promise((resolve) => {
-    const child = spawn('yt-dlp', args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    let stderr = '';
-    child.stderr.on('data', (d) => (stderr += d.toString()));
-    child.on('close', (code) => {
-      if (code === 0) return resolve({ ok: true, file: path.join(savePath, baseName) });
-      return resolve({ ok: false, error: stderr || `yt-dlp failed (code ${code})` });
-    });
-  });
+  if (!envelope.ok) {
+    lifecycle.push('failed');
+    const attempt = envelope.error?.details?.attempt;
+    const maxAttempts = envelope.error?.details?.maxAttempts;
+    return {
+      ok: false,
+      lifecycle,
+      attempt,
+      maxAttempts,
+      error: envelope.error?.message || 'Download failed',
+      details: envelope.error?.details,
+    };
+  }
+
+  lifecycle.push('done');
+  return {
+    ok: true,
+    lifecycle,
+    file: envelope.result?.savedFile,
+    usedArgs: envelope.result?.usedArgs,
+  };
 });
 
 app.whenReady().then(createWindow);
