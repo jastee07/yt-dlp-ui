@@ -1,0 +1,25 @@
+{
+  "name": "youtube-dlp-wrapper",
+  "version": "0.1.0",
+  "description": "Deterministic CLI bridge for yt-dlp used by the Mac desktop clipper",
+  "private": true,
+  "type": "module",
+  "main": "bin/cli.js",
+  "bin": {
+    "youtube-dlp-wrapper": "bin/cli.js"
+  },
+  "engines": {
+    "node": ">=20 <21"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": [
+    "yt-dlp",
+    "clipper",
+    "metadata",
+    "electron"
+  ],
+  "author": "OpenClaw Agent",
+  "license": "MIT"
+}
