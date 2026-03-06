@@ -51,6 +51,19 @@ npm run dist:win
 Outputs to `release/` (NSIS installer + portable EXE).
 
 ## Publish for non-technical users (no certs)
+### Option A: Automated via GitHub Actions (recommended)
+1. Push a version tag:
+   ```bash
+   git tag v0.3.1
+   git push origin v0.3.1
+   ```
+2. GitHub Action `.github/workflows/release.yml` will:
+   - run tests
+   - build unsigned macOS + Windows artifacts
+   - create a **draft** GitHub Release with attached files
+3. Open Releases on GitHub, review draft notes, then publish.
+
+### Option B: Manual local build
 1. Build artifacts with `npm run dist:mac` and/or `npm run dist:win`
 2. Create a GitHub Release
 3. Upload files from `release/`
