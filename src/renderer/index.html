@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>YouTube Clipper (Mac)</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main>
+      <h1>YouTube Clipper</h1>
+      <div id="deps" class="deps"></div>
+      <form id="clip-form">
+        <label>YouTube URL<input name="url" placeholder="https://www.youtube.com/watch?v=..." required /></label>
+        <label>
+          Save Folder Path
+          <div class="folder-row">
+            <input name="savePath" placeholder="/Users/you/Videos/clips" required />
+            <button type="button" id="pick-folder" class="secondary">Choose…</button>
+          </div>
+        </label>
+        <label>Clip Name (optional)<input name="name" placeholder="clip-name" /></label>
+        <div class="row">
+          <label>Start (HH:MM:SS)<input name="start" placeholder="00:00:00" /></label>
+          <label>End (HH:MM:SS)<input name="end" placeholder="00:00:30" /></label>
+        </div>
+        <button type="submit">Save Clip</button>
+      </form>
+      <pre id="status"></pre>
+    </main>
+    <script src="./renderer.js"></script>
+  </body>
+</html>
