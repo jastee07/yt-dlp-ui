@@ -1,14 +1,48 @@
 {
-  "name": "ytdlp-youtube-clipper",
-  "version": "0.2.0",
+  "name": "yt-dlp-ui",
+  "version": "0.3.0",
   "private": true,
-  "description": "Minimal macOS desktop wrapper for yt-dlp clip saves",
+  "description": "Minimal desktop wrapper for yt-dlp clip saves",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node --test"
+    "test": "node --test",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac dmg zip",
+    "dist:win": "electron-builder --win nsis portable"
   },
   "devDependencies": {
-    "electron": "^37.2.3"
+    "electron": "^37.2.3",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.jastee07.ytdlpui",
+    "productName": "yt-dlp-ui",
+    "asar": true,
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.video"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }
