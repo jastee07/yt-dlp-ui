@@ -38,6 +38,28 @@ function toErrorEnvelope({ command, requestId, error }) {
   });
 }
 
+function getMaxAttempts(payload = {}) {
+  const retryCount = Number.isInteger(payload.retryCount) ? payload.retryCount : 0;
+  return Math.max(1, retryCount + 1);
+}
+
+async function executeWithRetries({ execute, args, env, timeoutMs, maxAttempts }) {
+  let last = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    last = await execute({ args, env, timeoutMs });
+    if (last.exitCode === 0) {
+      return { ...last, attempt, maxAttempts };
+    }
+
+    if (attempt === maxAttempts) {
+      return { ...last, attempt, maxAttempts };
+    }
+  }
+
+  return { ...(last || {}), attempt: maxAttempts, maxAttempts };
+}
+
 export async function runCommand({ command, payload = {}, execute = executeYtDlp } = {}) {
   const requestId = payload?.requestId;
 
@@ -45,10 +67,12 @@ export async function runCommand({ command, payload = {}, execute = executeYtDlp
     if (command === 'metadata') {
       const validated = validateMetadataPayload(payload);
       const args = buildMetadataArgs(validated.url);
-      const proc = await execute({
+      const proc = await executeWithRetries({
+        execute,
         args,
         env: payload.env,
-        timeoutMs: payload.timeoutMs ?? DEFAULT_TIMEOUT_MS
+        timeoutMs: payload.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        maxAttempts: getMaxAttempts(payload)
       });
 
       if (proc.exitCode !== 0) {
@@ -57,7 +81,12 @@ export async function runCommand({ command, payload = {}, execute = executeYtDlp
           requestId,
           code: 'PROCESS',
           message: 'yt-dlp metadata command failed',
-          details: { exitCode: proc.exitCode, stderr: proc.stderr }
+          details: {
+            exitCode: proc.exitCode,
+            stderr: proc.stderr,
+            attempt: proc.attempt,
+            maxAttempts: proc.maxAttempts
+          }
         });
       }
 
@@ -80,10 +109,12 @@ export async function runCommand({ command, payload = {}, execute = executeYtDlp
     if (command === 'download') {
       const validated = validateDownloadPayload(payload);
       const args = buildDownloadArgs(validated);
-      const proc = await execute({
+      const proc = await executeWithRetries({
+        execute,
         args,
         env: payload.env,
-        timeoutMs: payload.timeoutMs ?? DEFAULT_TIMEOUT_MS
+        timeoutMs: payload.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        maxAttempts: getMaxAttempts(payload)
       });
 
       if (proc.exitCode !== 0) {
@@ -92,7 +123,12 @@ export async function runCommand({ command, payload = {}, execute = executeYtDlp
           requestId,
           code: 'PROCESS',
           message: 'yt-dlp download command failed',
-          details: { exitCode: proc.exitCode, stderr: proc.stderr }
+          details: {
+            exitCode: proc.exitCode,
+            stderr: proc.stderr,
+            attempt: proc.attempt,
+            maxAttempts: proc.maxAttempts
+          }
         });
       }
 

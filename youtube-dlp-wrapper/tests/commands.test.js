@@ -56,3 +56,50 @@ test('process errors should map to PROCESS envelope', async () => {
   assert.equal(response.error.code, 'PROCESS');
   assert.equal(response.error.details.exitCode, 1);
 });
+
+test('download retries process failures until success when retryCount is set', async () => {
+  let attempts = 0;
+  const response = await runCommand({
+    command: 'download',
+    payload: {
+      url: 'https://www.youtube.com/watch?v=clip123',
+      savePath: '/tmp/clips',
+      clipNamePolicy: 'auto',
+      outputHint: 'clip-base',
+      retryCount: 2
+    },
+    execute: async () => {
+      attempts += 1;
+      if (attempts < 3) {
+        return { exitCode: 1, stdout: '', stderr: `attempt-${attempts}-failed` };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    }
+  });
+
+  assert.equal(response.ok, true);
+  assert.equal(attempts, 3);
+});
+
+test('download includes attempt details after retries are exhausted', async () => {
+  let attempts = 0;
+  const response = await runCommand({
+    command: 'download',
+    payload: {
+      url: 'https://www.youtube.com/watch?v=clip123',
+      savePath: '/tmp/clips',
+      clipNamePolicy: 'auto',
+      outputHint: 'clip-base',
+      retryCount: 1
+    },
+    execute: async () => {
+      attempts += 1;
+      return { exitCode: 1, stdout: '', stderr: `attempt-${attempts}-failed` };
+    }
+  });
+
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, 'PROCESS');
+  assert.equal(response.error.details.attempt, 2);
+  assert.equal(response.error.details.maxAttempts, 2);
+});
