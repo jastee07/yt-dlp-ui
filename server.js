@@ -38,6 +38,38 @@ async function saveConfig(config) {
   await fsp.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2));
 }
 
+function runWrapperCommand(command, payload) {
+  const wrapperCliPath = path.join(__dirname, 'youtube-dlp-wrapper', 'bin', 'cli.js');
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [wrapperCliPath, command, '--payload', JSON.stringify(payload)], {
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on('error', reject);
+
+    child.on('close', () => {
+      try {
+        const envelope = JSON.parse(stdout || '{}');
+        resolve({ envelope, stderr });
+      } catch (error) {
+        reject(new Error(`Wrapper returned invalid JSON: ${stdout || stderr || String(error)}`));
+      }
+    });
+  });
+}
+
 app.get('/api/config', async (_req, res) => {
   const config = await loadConfig();
   res.json(config);
@@ -82,26 +114,30 @@ app.post('/api/clip', async (req, res) => {
     config.counters = counters;
     await saveConfig(config);
 
-    const outputTemplate = path.join(savePath, `${baseName}.%(ext)s`);
-    const args = ['-o', outputTemplate];
+    const hasExplicitName = Boolean(sanitizeName((name || '').trim()));
+    const clipPayload = {};
+    if (start) clipPayload.start = start;
+    if (end) clipPayload.end = end;
+    if (hasExplicitName) clipPayload.name = baseName;
 
-    if (start || end) {
-      args.push('--download-sections', `*${start || ''}-${end || ''}`);
+    const wrapperPayload = {
+      url,
+      savePath,
+      clipNamePolicy: hasExplicitName ? 'explicit' : 'auto',
+      outputHint: baseName,
+      clip: clipPayload
+    };
+
+    const { envelope } = await runWrapperCommand('download', wrapperPayload);
+
+    if (!envelope?.ok) {
+      const message = envelope?.error?.message || 'Clip download failed';
+      const details = envelope?.error?.details;
+      const statusCode = envelope?.error?.code === 'VALIDATION' ? 400 : 500;
+      return res.status(statusCode).json({ ok: false, error: message, details });
     }
 
-    args.push(url);
-
-    const child = spawn('yt-dlp', args, { stdio: ['ignore', 'pipe', 'pipe'] });
-
-    let stderr = '';
-    child.stderr.on('data', (d) => { stderr += d.toString(); });
-
-    child.on('close', (code) => {
-      if (code === 0) {
-        return res.json({ ok: true, file: path.join(savePath, baseName) });
-      }
-      return res.status(500).json({ ok: false, error: stderr || `yt-dlp failed (code ${code})` });
-    });
+    return res.json({ ok: true, file: envelope.result?.savedFile || path.join(savePath, baseName), wrapper: envelope.result });
   } catch (err) {
     return res.status(500).json({ ok: false, error: err.message || 'Unknown error' });
   }
