@@ -12,6 +12,10 @@
       <div id="deps" class="deps"></div>
       <form id="clip-form">
         <label>YouTube URL<input name="url" placeholder="https://www.youtube.com/watch?v=..." required /></label>
+        <div class="row">
+          <button type="button" id="fetch-metadata" class="secondary">Fetch Metadata</button>
+          <span id="metadata" class="meta"></span>
+        </div>
         <label>
           Save Folder Path
           <div class="folder-row">
@@ -24,6 +28,10 @@
           <label>Start (HH:MM:SS)<input name="start" placeholder="00:00:00" /></label>
           <label>End (HH:MM:SS)<input name="end" placeholder="00:00:30" /></label>
         </div>
+        <label>
+          Format (optional)
+          <input name="format" placeholder="bestvideo+bestaudio/best" />
+        </label>
         <button type="submit">Save Clip</button>
       </form>
       <pre id="status"></pre>
