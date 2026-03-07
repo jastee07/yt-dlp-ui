@@ -1,0 +1,156 @@
+{
+  "tasks": [
+    {
+      "id": "ux-clipboard-url",
+      "title": "Auto-fill URL from clipboard on launch",
+      "description": "Read clipboard text on app boot, validate YouTube watch URL, and prefill URL input when valid.",
+      "status": "todo",
+      "acceptance_criteria": [
+        "Tests are written first and fail before implementation",
+        "Clipboard parser accepts youtube watch URLs and rejects non-watch URLs",
+        "Renderer pre-fills URL field only when parser returns valid",
+        "npm test passes"
+      ],
+      "priority": "high",
+      "dependencies": []
+    },
+    {
+      "id": "ux-open-output-folder",
+      "title": "Open output folder button after success",
+      "description": "Expose open-folder action in UI once a clip is saved.",
+      "status": "todo",
+      "acceptance_criteria": [
+        "Tests first for output path helper and IPC call mapping",
+        "Button appears after successful clip save",
+        "Button opens containing folder",
+        "npm test passes"
+      ],
+      "priority": "high",
+      "dependencies": []
+    },
+    {
+      "id": "ux-recent-folders",
+      "title": "Recent save folders dropdown (max 5)",
+      "description": "Persist and show last five unique save folders.",
+      "status": "todo",
+      "acceptance_criteria": [
+        "Tests first for LRU recents behavior",
+        "Recents persist across app restarts",
+        "Dropdown allows selecting prior folder",
+        "npm test passes"
+      ],
+      "priority": "medium",
+      "dependencies": []
+    },
+    {
+      "id": "reliability-queue",
+      "title": "Queue clip jobs",
+      "description": "Allow multiple submits and process sequentially.",
+      "status": "todo",
+      "acceptance_criteria": [
+        "Tests first for queue ordering and state transitions",
+        "Multiple queued jobs execute in FIFO order",
+        "UI reflects queued/running/completed states",
+        "npm test passes"
+      ],
+      "priority": "high",
+      "dependencies": [
+        "ux-clipboard-url"
+      ]
+    },
+    {
+      "id": "reliability-progress",
+      "title": "Progress and ETA in UI",
+      "description": "Parse yt-dlp output and stream progress updates.",
+      "status": "todo",
+      "acceptance_criteria": [
+        "Tests first for progress line parsing",
+        "Progress updates emit over IPC",
+        "UI shows percentage and ETA when available",
+        "npm test passes"
+      ],
+      "priority": "medium",
+      "dependencies": [
+        "reliability-queue"
+      ]
+    },
+    {
+      "id": "reliability-history",
+      "title": "Persist recent job history (max 50)",
+      "description": "Save recent runs for audit and debugging.",
+      "status": "todo",
+      "acceptance_criteria": [
+        "Tests first for bounded history persistence",
+        "History includes timestamps, input URL, output path, result",
+        "History view available in renderer",
+        "npm test passes"
+      ],
+      "priority": "medium",
+      "dependencies": [
+        "reliability-queue"
+      ]
+    },
+    {
+      "id": "reliability-retry",
+      "title": "Retry transient failures once",
+      "description": "Retry one time for recognized transient failure classes.",
+      "status": "todo",
+      "acceptance_criteria": [
+        "Tests first for retry policy",
+        "Only transient errors trigger one retry",
+        "Final failure is reported with both attempts context",
+        "npm test passes"
+      ],
+      "priority": "medium",
+      "dependencies": [
+        "reliability-queue"
+      ]
+    },
+    {
+      "id": "hygiene-desktop-only-cleanup",
+      "title": "Remove legacy web wrapper files",
+      "description": "Remove public/ and server.js once desktop parity is complete.",
+      "status": "todo",
+      "acceptance_criteria": [
+        "No runtime references to removed files",
+        "npm test passes",
+        "README reflects desktop-only architecture"
+      ],
+      "priority": "medium",
+      "dependencies": [
+        "reliability-progress"
+      ]
+    },
+    {
+      "id": "tests-ipc-smoke",
+      "title": "Expand IPC tests and add smoke test",
+      "description": "Increase confidence around main process handlers and command generation.",
+      "status": "todo",
+      "acceptance_criteria": [
+        "Tests first for IPC contract behavior",
+        "Smoke test validates happy-path command assembly with mocked spawn",
+        "npm test passes"
+      ],
+      "priority": "high",
+      "dependencies": [
+        "hygiene-desktop-only-cleanup"
+      ]
+    },
+    {
+      "id": "distribution-autoupdate",
+      "title": "Add optional auto-update check",
+      "description": "Poll GitHub Releases metadata and notify users of updates.",
+      "status": "todo",
+      "acceptance_criteria": [
+        "Tests first for feed URL resolution/fallback",
+        "App surfaces update-available notice",
+        "README documents opt-in behavior",
+        "npm test passes"
+      ],
+      "priority": "low",
+      "dependencies": [
+        "tests-ipc-smoke"
+      ]
+    }
+  ]
+}
