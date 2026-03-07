@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs/promises');
 const { spawnSync } = require('child_process');
@@ -7,21 +7,30 @@ const { summarizeDependencyStatus } = require('./core/deps');
 const { validateClipRequest, validateOutputPath } = require('./core/validation');
 const { runWrapperCommand } = require('./core/wrapper');
 const { createLifecycleTracker } = require('./core/lifecycle');
+const { normalizeConfig, applySettingsUpdate } = require('./core/config');
 
 const DATA_DIR = path.join(app.getPath('userData'), 'data');
 const CONFIG_PATH = path.join(DATA_DIR, 'config.json');
+const LOG_DIR = path.join(app.getPath('userData'), 'logs');
+const LOG_PATH = path.join(LOG_DIR, 'app.log');
 
 async function loadConfig() {
   try {
-    return JSON.parse(await fs.readFile(CONFIG_PATH, 'utf8'));
+    return normalizeConfig(JSON.parse(await fs.readFile(CONFIG_PATH, 'utf8')));
   } catch {
-    return { defaultSavePath: '', counters: {} };
+    return normalizeConfig();
   }
 }
 
 async function saveConfig(config) {
   await fs.mkdir(DATA_DIR, { recursive: true });
-  await fs.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2));
+  await fs.writeFile(CONFIG_PATH, JSON.stringify(normalizeConfig(config), null, 2));
+}
+
+async function appendLog(level, event, details = {}) {
+  const line = JSON.stringify({ at: new Date().toISOString(), level, event, details });
+  await fs.mkdir(LOG_DIR, { recursive: true });
+  await fs.appendFile(LOG_PATH, `${line}\n`, 'utf8');
 }
 
 function hasBinary(binary) {
@@ -52,6 +61,22 @@ function createWindow() {
 }
 
 ipcMain.handle('config:get', async () => loadConfig());
+ipcMain.handle('settings:update', async (_evt, payload = {}) => {
+  const current = await loadConfig();
+  const next = applySettingsUpdate(current, payload);
+  await saveConfig(next);
+  await appendLog('info', 'settings.updated', {
+    hasDefaultSavePath: Boolean(next.defaultSavePath),
+    hasDefaultFormat: Boolean(next.defaultFormat),
+  });
+  return { ok: true, config: next };
+});
+ipcMain.handle('logs:get-info', async () => ({ ok: true, path: LOG_PATH, dir: LOG_DIR }));
+ipcMain.handle('logs:open-folder', async () => {
+  await fs.mkdir(LOG_DIR, { recursive: true });
+  const error = await shell.openPath(LOG_DIR);
+  return { ok: !error, error: error || undefined, dir: LOG_DIR };
+});
 ipcMain.handle('deps:check', async () => getDependencyStatus());
 
 ipcMain.handle('dialog:pick-folder', async () => {
@@ -64,10 +89,16 @@ ipcMain.handle('dialog:pick-folder', async () => {
 
 ipcMain.handle('clip:metadata', async (_evt, payload) => {
   const request = validateClipRequest(payload, { requireSavePath: false });
-  if (!request.ok) return { ok: false, error: request.errors[0] };
+  if (!request.ok) {
+    await appendLog('warn', 'metadata.validation_failed', { errors: request.errors });
+    return { ok: false, error: request.errors[0] };
+  }
 
   const deps = getDependencyStatus();
-  if (!deps.ok) return { ok: false, error: deps.message };
+  if (!deps.ok) {
+    await appendLog('warn', 'metadata.deps_failed', { message: deps.message });
+    return { ok: false, error: deps.message };
+  }
 
   const envelope = await runWrapperCommand('metadata', {
     url: request.normalized.url,
@@ -75,6 +106,10 @@ ipcMain.handle('clip:metadata', async (_evt, payload) => {
   });
 
   if (!envelope.ok) {
+    await appendLog('error', 'metadata.wrapper_failed', {
+      message: envelope.error?.message,
+      details: envelope.error?.details,
+    });
     return {
       ok: false,
       error: envelope.error?.message || 'Metadata request failed',
@@ -90,22 +125,36 @@ ipcMain.handle('clip:run', async (_evt, payload) => {
   lifecycle.add('queued');
 
   const request = validateClipRequest(payload);
-  if (!request.ok) return { ok: false, error: request.errors[0], lifecycle: lifecycle.list() };
+  if (!request.ok) {
+    await appendLog('warn', 'clip.validation_failed', { errors: request.errors });
+    return { ok: false, error: request.errors[0], lifecycle: lifecycle.list() };
+  }
 
   const deps = getDependencyStatus();
-  if (!deps.ok) return { ok: false, error: deps.message, lifecycle: lifecycle.list() };
+  if (!deps.ok) {
+    await appendLog('warn', 'clip.deps_failed', { message: deps.message });
+    return { ok: false, error: deps.message, lifecycle: lifecycle.list() };
+  }
 
   lifecycle.add('validating');
   const time = validateTimes(request.normalized.start, request.normalized.end);
-  if (!time.ok) return { ok: false, error: time.error, lifecycle: lifecycle.list() };
+  if (!time.ok) {
+    await appendLog('warn', 'clip.time_validation_failed', { start: request.normalized.start, end: request.normalized.end, error: time.error });
+    return { ok: false, error: time.error, lifecycle: lifecycle.list() };
+  }
 
   const outputPath = validateOutputPath(request.normalized.savePath);
-  if (!outputPath.ok) return { ok: false, error: outputPath.error, details: outputPath.details, lifecycle: lifecycle.list() };
+  if (!outputPath.ok) {
+    await appendLog('warn', 'clip.output_path_invalid', { path: request.normalized.savePath, error: outputPath.error, details: outputPath.details });
+    return { ok: false, error: outputPath.error, details: outputPath.details, lifecycle: lifecycle.list() };
+  }
 
   lifecycle.add('processing', { step: 'resolve-output' });
 
-  const config = await loadConfig();
-  config.defaultSavePath = outputPath.resolvedPath;
+  const config = applySettingsUpdate(await loadConfig(), {
+    defaultSavePath: outputPath.resolvedPath,
+    defaultFormat: request.normalized.format || '',
+  });
 
   const { name: baseName } = resolveClipName({
     providedName: request.normalized.name,
@@ -134,6 +183,12 @@ ipcMain.handle('clip:run', async (_evt, payload) => {
     const attempt = envelope.error?.details?.attempt;
     const maxAttempts = envelope.error?.details?.maxAttempts;
     lifecycle.add('failed', { attempt, maxAttempts });
+    await appendLog('error', 'clip.wrapper_failed', {
+      attempt,
+      maxAttempts,
+      message: envelope.error?.message,
+      details: envelope.error?.details,
+    });
     return {
       ok: false,
       lifecycle: lifecycle.list(),
@@ -145,6 +200,7 @@ ipcMain.handle('clip:run', async (_evt, payload) => {
   }
 
   lifecycle.add('done');
+  await appendLog('info', 'clip.completed', { file: envelope.result?.savedFile });
   return {
     ok: true,
     lifecycle: lifecycle.list(),
@@ -153,7 +209,10 @@ ipcMain.handle('clip:run', async (_evt, payload) => {
   };
 });
 
-app.whenReady().then(createWindow);
+app.whenReady().then(async () => {
+  await appendLog('info', 'app.ready', { platform: process.platform, version: app.getVersion() });
+  createWindow();
+});
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
