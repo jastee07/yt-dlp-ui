@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { buildDownloadArgs, validateDownloadPayload } from './download.js';
+import { buildDownloadArgs, resolveDownloadBaseName, validateDownloadPayload } from './download.js';
 import { buildMetadataArgs, validateMetadataPayload } from './metadata.js';
 import { executeYtDlp } from './process.js';
 
@@ -132,7 +132,7 @@ export async function runCommand({ command, payload = {}, execute = executeYtDlp
         });
       }
 
-      const baseName = payload.clip?.name?.trim() || payload.outputHint || 'clip';
+      const baseName = resolveDownloadBaseName(payload);
       return okEnvelope({
         command,
         requestId,

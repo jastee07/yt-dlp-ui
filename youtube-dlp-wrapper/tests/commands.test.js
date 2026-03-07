@@ -103,3 +103,20 @@ test('download includes attempt details after retries are exhausted', async () =
   assert.equal(response.error.details.attempt, 2);
   assert.equal(response.error.details.maxAttempts, 2);
 });
+
+test('download savedFile should align with sanitized explicit clip name', async () => {
+  const response = await runCommand({
+    command: 'download',
+    payload: {
+      url: 'https://www.youtube.com/watch?v=clip123',
+      savePath: '/tmp/clips',
+      clipNamePolicy: 'explicit',
+      clip: { name: '../outside' },
+      outputHint: 'clip-base'
+    },
+    execute: async ({ args }) => ({ exitCode: 0, stdout: '', stderr: '', args })
+  });
+
+  assert.equal(response.ok, true);
+  assert.equal(response.result.savedFile, '/tmp/clips/outside');
+});

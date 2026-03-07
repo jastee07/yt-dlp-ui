@@ -46,7 +46,7 @@ function sanitizeClipName(value) {
     .slice(0, 120);
 }
 
-function determineClipName({ clip = {}, clipNamePolicy, outputHint }) {
+export function resolveDownloadBaseName({ clip = {}, clipNamePolicy, outputHint }) {
   const explicitName = sanitizeClipName(clip.name);
   if (explicitName) {
     return explicitName;
@@ -76,7 +76,7 @@ export function buildDownloadArgs(options) {
 
   validateDownloadPayload({ url, savePath, clipNamePolicy, clip, outputHint });
 
-  const baseName = determineClipName({ clip, clipNamePolicy, outputHint });
+  const baseName = resolveDownloadBaseName({ clip, clipNamePolicy, outputHint });
   const outputTemplate = join(savePath, `${baseName}.%(ext)s`);
 
   const args = ['--output', outputTemplate];
