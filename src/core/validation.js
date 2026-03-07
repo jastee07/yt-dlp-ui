@@ -15,7 +15,8 @@ function isValidYouTubeUrl(url) {
   }
 }
 
-function validateClipRequest(payload = {}) {
+function validateClipRequest(payload = {}, options = {}) {
+  const { requireSavePath = true } = options;
   const errors = [];
   const normalized = {
     url: String(payload.url || '').trim(),
@@ -30,7 +31,7 @@ function validateClipRequest(payload = {}) {
     errors.push('Please enter a valid YouTube watch URL.');
   }
 
-  if (!normalized.savePath) {
+  if (requireSavePath && !normalized.savePath) {
     errors.push('Save path is required.');
   }
 

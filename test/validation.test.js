@@ -35,6 +35,19 @@ test('validateClipRequest normalizes payload and returns errors', () => {
   assert.equal(good.normalized.name, 'demo');
 });
 
+test('validateClipRequest allows metadata requests without savePath', () => {
+  const metadataRequest = validateClipRequest(
+    {
+      url: 'https://www.youtube.com/watch?v=abc123',
+      savePath: '',
+    },
+    { requireSavePath: false }
+  );
+
+  assert.equal(metadataRequest.ok, true);
+  assert.equal(metadataRequest.normalized.savePath, '');
+});
+
 test('validateOutputPath validates writable directories', () => {
   const okDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ytui-'));
   const out = validateOutputPath(okDir);

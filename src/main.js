@@ -63,7 +63,7 @@ ipcMain.handle('dialog:pick-folder', async () => {
 });
 
 ipcMain.handle('clip:metadata', async (_evt, payload) => {
-  const request = validateClipRequest(payload);
+  const request = validateClipRequest(payload, { requireSavePath: false });
   if (!request.ok) return { ok: false, error: request.errors[0] };
 
   const deps = getDependencyStatus();
