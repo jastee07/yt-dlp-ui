@@ -22,6 +22,11 @@ async function loadConfig() {
   }
 }
 
+async function loadConfigStrict() {
+  const raw = await fs.readFile(CONFIG_PATH, 'utf8');
+  return normalizeConfig(JSON.parse(raw));
+}
+
 async function saveConfig(config) {
   await fs.mkdir(DATA_DIR, { recursive: true });
   await fs.writeFile(CONFIG_PATH, JSON.stringify(normalizeConfig(config), null, 2));
@@ -72,8 +77,14 @@ ipcMain.handle('settings:update', async (_evt, payload = {}) => {
 
   // Re-read before save so settings-only updates do not overwrite newer
   // counters written by concurrent clip runs.
-  const latest = await loadConfig();
-  next.counters = latest.counters;
+  // If strict re-read fails (transient read/parse issue), keep the original
+  // counters from `current` to avoid wiping data.
+  try {
+    const latest = await loadConfigStrict();
+    next.counters = latest.counters;
+  } catch {
+    next.counters = current.counters;
+  }
 
   await saveConfig(next);
   await appendLog('info', 'settings.updated', {
