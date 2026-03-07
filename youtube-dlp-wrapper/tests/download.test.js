@@ -45,3 +45,39 @@ test('download args should fallback to output hint when clip name missing', () =
     VIDEO_URL
   ]);
 });
+
+test('download args should sanitize explicit clip names to prevent path traversal', () => {
+  const args = buildDownloadArgs({
+    url: VIDEO_URL,
+    savePath: SAVE_PATH,
+    clip: {
+      name: '../outside'
+    },
+    clipNamePolicy: 'explicit',
+    outputHint: 'safe-hint'
+  });
+
+  assert.deepStrictEqual(args, [
+    '--output',
+    join(SAVE_PATH, 'outside.%(ext)s'),
+    VIDEO_URL
+  ]);
+});
+
+test('download args should sanitize explicit clip names to prevent nested paths', () => {
+  const args = buildDownloadArgs({
+    url: VIDEO_URL,
+    savePath: SAVE_PATH,
+    clip: {
+      name: 'subdir/name'
+    },
+    clipNamePolicy: 'explicit',
+    outputHint: 'safe-hint'
+  });
+
+  assert.deepStrictEqual(args, [
+    '--output',
+    join(SAVE_PATH, 'name.%(ext)s'),
+    VIDEO_URL
+  ]);
+});

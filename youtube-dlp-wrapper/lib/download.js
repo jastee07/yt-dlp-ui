@@ -34,14 +34,27 @@ export function validateDownloadPayload(payload = {}) {
   return payload;
 }
 
+function sanitizeClipName(value) {
+  const leaf = String(value ?? '')
+    .replace(/\\/g, '/')
+    .split('/')
+    .pop();
+
+  return String(leaf ?? '')
+    .replace(/[^a-zA-Z0-9-_ ]+/g, '')
+    .trim()
+    .slice(0, 120);
+}
+
 function determineClipName({ clip = {}, clipNamePolicy, outputHint }) {
-  const explicitName = clip.name?.trim();
+  const explicitName = sanitizeClipName(clip.name);
   if (explicitName) {
     return explicitName;
   }
 
-  if (outputHint) {
-    return outputHint;
+  const hintedName = sanitizeClipName(outputHint);
+  if (hintedName) {
+    return hintedName;
   }
 
   if (clipNamePolicy === 'auto') {
