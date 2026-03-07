@@ -34,7 +34,13 @@ function renderMetadata(metadata) {
 
 function formatLifecycle(lifecycle = []) {
   if (!Array.isArray(lifecycle) || lifecycle.length === 0) return '';
-  return `\nLifecycle: ${lifecycle.join(' → ')}`;
+  const states = lifecycle.map((entry) => {
+    if (typeof entry === 'string') return entry;
+    const state = entry.state || 'unknown';
+    if (entry.attempt && entry.maxAttempts) return `${state} (${entry.attempt}/${entry.maxAttempts})`;
+    return state;
+  });
+  return `\nLifecycle: ${states.join(' → ')}`;
 }
 
 async function boot() {

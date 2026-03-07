@@ -6,6 +6,7 @@ const { validateTimes, resolveClipName } = require('./core/clipper');
 const { summarizeDependencyStatus } = require('./core/deps');
 const { validateClipRequest, validateOutputPath } = require('./core/validation');
 const { runWrapperCommand } = require('./core/wrapper');
+const { createLifecycleTracker } = require('./core/lifecycle');
 
 const DATA_DIR = path.join(app.getPath('userData'), 'data');
 const CONFIG_PATH = path.join(DATA_DIR, 'config.json');
@@ -85,21 +86,23 @@ ipcMain.handle('clip:metadata', async (_evt, payload) => {
 });
 
 ipcMain.handle('clip:run', async (_evt, payload) => {
-  const lifecycle = ['queued'];
+  const lifecycle = createLifecycleTracker();
+  lifecycle.add('queued');
 
   const request = validateClipRequest(payload);
-  if (!request.ok) return { ok: false, error: request.errors[0], lifecycle };
+  if (!request.ok) return { ok: false, error: request.errors[0], lifecycle: lifecycle.list() };
 
   const deps = getDependencyStatus();
-  if (!deps.ok) return { ok: false, error: deps.message, lifecycle };
+  if (!deps.ok) return { ok: false, error: deps.message, lifecycle: lifecycle.list() };
 
+  lifecycle.add('validating');
   const time = validateTimes(request.normalized.start, request.normalized.end);
-  if (!time.ok) return { ok: false, error: time.error, lifecycle };
+  if (!time.ok) return { ok: false, error: time.error, lifecycle: lifecycle.list() };
 
   const outputPath = validateOutputPath(request.normalized.savePath);
-  if (!outputPath.ok) return { ok: false, error: outputPath.error, details: outputPath.details, lifecycle };
+  if (!outputPath.ok) return { ok: false, error: outputPath.error, details: outputPath.details, lifecycle: lifecycle.list() };
 
-  lifecycle.push('processing');
+  lifecycle.add('processing', { step: 'resolve-output' });
 
   const config = await loadConfig();
   config.defaultSavePath = outputPath.resolvedPath;
@@ -112,7 +115,7 @@ ipcMain.handle('clip:run', async (_evt, payload) => {
 
   await saveConfig(config);
 
-  lifecycle.push('downloading');
+  lifecycle.add('downloading');
   const envelope = await runWrapperCommand('download', {
     url: request.normalized.url,
     savePath: outputPath.resolvedPath,
@@ -128,12 +131,12 @@ ipcMain.handle('clip:run', async (_evt, payload) => {
   });
 
   if (!envelope.ok) {
-    lifecycle.push('failed');
     const attempt = envelope.error?.details?.attempt;
     const maxAttempts = envelope.error?.details?.maxAttempts;
+    lifecycle.add('failed', { attempt, maxAttempts });
     return {
       ok: false,
-      lifecycle,
+      lifecycle: lifecycle.list(),
       attempt,
       maxAttempts,
       error: envelope.error?.message || 'Download failed',
@@ -141,10 +144,10 @@ ipcMain.handle('clip:run', async (_evt, payload) => {
     };
   }
 
-  lifecycle.push('done');
+  lifecycle.add('done');
   return {
     ok: true,
-    lifecycle,
+    lifecycle: lifecycle.list(),
     file: envelope.result?.savedFile,
     usedArgs: envelope.result?.usedArgs,
   };
