@@ -85,8 +85,10 @@ export function buildDownloadArgs(options) {
     args.push('--format', format);
   }
 
-  if (clip.start && clip.end) {
-    args.push('--download-sections', `*${clip.start}-${clip.end}`);
+  if (clip.start || clip.end) {
+    const start = clip.start ?? '';
+    const end = clip.end ?? 'inf';
+    args.push('--download-sections', `*${start}-${end}`);
   }
 
   args.push(url);

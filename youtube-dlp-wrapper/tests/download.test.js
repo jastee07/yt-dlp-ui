@@ -46,6 +46,46 @@ test('download args should fallback to output hint when clip name missing', () =
   ]);
 });
 
+test('download args should preserve open-ended sections when only start is provided', () => {
+  const args = buildDownloadArgs({
+    url: VIDEO_URL,
+    savePath: SAVE_PATH,
+    clip: {
+      name: 'start-only',
+      start: '00:01:00'
+    },
+    clipNamePolicy: 'explicit'
+  });
+
+  assert.deepStrictEqual(args, [
+    '--output',
+    join(SAVE_PATH, 'start-only.%(ext)s'),
+    '--download-sections',
+    '*00:01:00-inf',
+    VIDEO_URL
+  ]);
+});
+
+test('download args should preserve open-ended sections when only end is provided', () => {
+  const args = buildDownloadArgs({
+    url: VIDEO_URL,
+    savePath: SAVE_PATH,
+    clip: {
+      name: 'end-only',
+      end: '00:02:30'
+    },
+    clipNamePolicy: 'explicit'
+  });
+
+  assert.deepStrictEqual(args, [
+    '--output',
+    join(SAVE_PATH, 'end-only.%(ext)s'),
+    '--download-sections',
+    '*-00:02:30',
+    VIDEO_URL
+  ]);
+});
+
 test('download args should sanitize explicit clip names to prevent path traversal', () => {
   const args = buildDownloadArgs({
     url: VIDEO_URL,
