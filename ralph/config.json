@@ -1,0 +1,18 @@
+{
+  "launcher": "codex",
+  "model": "openai/gpt-5.1-codex",
+  "max_iterations": 60,
+  "max_consecutive_failures": 3,
+  "max_runtime_minutes": 180,
+  "require_clean_git": false,
+  "auto_commit": true,
+  "auto_push": false,
+  "allow_destructive_git": false,
+  "require_pr_before_merge": true,
+  "review_needed": false,
+  "validate_command": "npm test",
+  "adapter": {
+    "codex_command": "codex --model {model} --prompt-file {prompt_file}",
+    "claude_command": "claude code --model {model} --prompt-file {prompt_file}"
+  }
+}
