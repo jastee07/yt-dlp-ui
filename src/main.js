@@ -22,6 +22,11 @@ async function loadConfig() {
   }
 }
 
+async function loadConfigStrict() {
+  const raw = await fs.readFile(CONFIG_PATH, 'utf8');
+  return normalizeConfig(JSON.parse(raw));
+}
+
 async function saveConfig(config) {
   await fs.mkdir(DATA_DIR, { recursive: true });
   await fs.writeFile(CONFIG_PATH, JSON.stringify(normalizeConfig(config), null, 2));
@@ -29,8 +34,13 @@ async function saveConfig(config) {
 
 async function appendLog(level, event, details = {}) {
   const line = JSON.stringify({ at: new Date().toISOString(), level, event, details });
-  await fs.mkdir(LOG_DIR, { recursive: true });
-  await fs.appendFile(LOG_PATH, `${line}\n`, 'utf8');
+
+  try {
+    await fs.mkdir(LOG_DIR, { recursive: true });
+    await fs.appendFile(LOG_PATH, `${line}\n`, 'utf8');
+  } catch (error) {
+    console.warn('Log write failed:', error?.message || error);
+  }
 }
 
 function hasBinary(binary) {
@@ -64,6 +74,18 @@ ipcMain.handle('config:get', async () => loadConfig());
 ipcMain.handle('settings:update', async (_evt, payload = {}) => {
   const current = await loadConfig();
   const next = applySettingsUpdate(current, payload);
+
+  // Re-read before save so settings-only updates do not overwrite newer
+  // counters written by concurrent clip runs.
+  // If strict re-read fails (transient read/parse issue), keep the original
+  // counters from `current` to avoid wiping data.
+  try {
+    const latest = await loadConfigStrict();
+    next.counters = latest.counters;
+  } catch {
+    next.counters = current.counters;
+  }
+
   await saveConfig(next);
   await appendLog('info', 'settings.updated', {
     hasDefaultSavePath: Boolean(next.defaultSavePath),
@@ -210,7 +232,7 @@ ipcMain.handle('clip:run', async (_evt, payload) => {
 });
 
 app.whenReady().then(async () => {
-  await appendLog('info', 'app.ready', { platform: process.platform, version: app.getVersion() });
+  appendLog('info', 'app.ready', { platform: process.platform, version: app.getVersion() });
   createWindow();
 });
 app.on('window-all-closed', () => {
