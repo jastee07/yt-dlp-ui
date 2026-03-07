@@ -40,6 +40,10 @@ form.addEventListener('submit', async (e) => {
     end: form.end.value.trim(),
   };
 
+  if (!payload.savePath) {
+    return setStatus('Error: Save folder path is required to download a clip.', true);
+  }
+
   const result = await window.clipper.runClip(payload);
   if (!result.ok) return setStatus(`Error: ${result.error}`, true);
 
